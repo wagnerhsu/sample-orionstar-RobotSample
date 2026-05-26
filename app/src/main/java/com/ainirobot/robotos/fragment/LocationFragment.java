@@ -47,6 +47,7 @@ public class LocationFragment extends BaseFragment {
     private Button mRemove_location;
     private Button mSet_reception_point;
     private Button mGetname;
+    private Button mGet_all_maps;
 
     @Override
     public View onCreateView(Context context) {
@@ -63,6 +64,7 @@ public class LocationFragment extends BaseFragment {
         mRemove_location = (Button) root.findViewById(R.id.remove_location);
         mSet_reception_point = (Button) root.findViewById(R.id.set_reception_point);
         mGetname = (Button) root.findViewById(R.id.getname);
+        mGet_all_maps = (Button) root.findViewById(R.id.get_all_maps);
 
 
         mIs_in_location.setOnClickListener(new View.OnClickListener() {
@@ -111,6 +113,12 @@ public class LocationFragment extends BaseFragment {
             @Override
             public void onClick(View view) {
                 getName();
+            }
+        });
+        mGet_all_maps.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                getAllMaps();
             }
         });
     }
@@ -184,7 +192,7 @@ public class LocationFragment extends BaseFragment {
                 super.onResult(result, message, extraData);
                 if (!TextUtils.isEmpty(message)) {
                     String name = message;
-//                    LogTools.info(" name: ----" + name+"==="+message);
+                    LogTools.info(" name: ----" + name+"==="+message);
                 }
             }
         });
@@ -253,6 +261,19 @@ public class LocationFragment extends BaseFragment {
                 if ("succeed".equals(message)) {
                 } else {
                 }
+            }
+        });
+    }
+
+    /**
+     * 获取所有地图列表
+     */
+    private void getAllMaps() {
+        RobotApi.getInstance().getPlaceList(0, new CommandListener() {
+            @Override
+            public void onResult(int result, String message) {
+                LogTools.info("getAllMaps result: " + result + " message: " + message);
+                // 这里可以根据需要进一步处理 message，比如解析 JSON 或显示到界面
             }
         });
     }
