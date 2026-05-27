@@ -21,6 +21,8 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Toast;
 
 import androidx.fragment.app.Fragment;
 
@@ -48,6 +50,8 @@ public class LocationFragment extends BaseFragment {
     private Button mSet_reception_point;
     private Button mGetname;
     private Button mGet_all_maps;
+    private Button mFindCurrentPointBtn;
+    private EditText mEditPlaceName;
 
     @Override
     public View onCreateView(Context context) {
@@ -65,6 +69,10 @@ public class LocationFragment extends BaseFragment {
         mSet_reception_point = (Button) root.findViewById(R.id.set_reception_point);
         mGetname = (Button) root.findViewById(R.id.getname);
         mGet_all_maps = (Button) root.findViewById(R.id.get_all_maps);
+        mEditPlaceName = (EditText) root.findViewById(R.id.edit_place_name);
+        mFindCurrentPointBtn = new Button(root.getContext());
+        mFindCurrentPointBtn.setText("查找当前点节点名");
+        ((android.widget.LinearLayout) root).addView(mFindCurrentPointBtn);
 
 
         mIs_in_location.setOnClickListener(new View.OnClickListener() {
@@ -121,6 +129,12 @@ public class LocationFragment extends BaseFragment {
                 getAllMaps();
             }
         });
+        mFindCurrentPointBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                findCurrentPointNodeName();
+            }
+        });
     }
 
 
@@ -130,8 +144,13 @@ public class LocationFragment extends BaseFragment {
      */
     private void isRobotInlocation() {
         try {
+            String placeName = mEditPlaceName.getText() != null ? mEditPlaceName.getText().toString().trim() : "";
+            if (TextUtils.isEmpty(placeName)) {
+                LogTools.info("Place name is empty, please input a name");
+                return;
+            }
             JSONObject params = new JSONObject();
-            params.put(Definition.JSON_NAVI_TARGET_PLACE_NAME, "接待点");
+            params.put(Definition.JSON_NAVI_TARGET_PLACE_NAME, placeName);
             params.put(Definition.JSON_NAVI_COORDINATE_DEVIATION, 2.0);
 
             RobotApi.getInstance().isRobotInlocations(0,
@@ -219,7 +238,12 @@ public class LocationFragment extends BaseFragment {
      * 设置当前位置名称
      */
     private void setLocation(){
-        RobotApi.getInstance().setLocation(0, "接待点", new CommandListener() {
+        String placeName = mEditPlaceName.getText() != null ? mEditPlaceName.getText().toString().trim() : "";
+        if (TextUtils.isEmpty(placeName)) {
+            LogTools.info("Place name is empty, please input a name");
+            return;
+        }
+        RobotApi.getInstance().setLocation(0, placeName, new CommandListener() {
             @Override
             public void onResult(int result, String message) {
                 LogTools.info("setLocation result: " + result + " message: " + message);
@@ -238,6 +262,7 @@ public class LocationFragment extends BaseFragment {
             @Override
             public void onResult(int result, String message) {
                 LogTools.info("getLocation result: " + result + " message: "+ message);
+                Toast.makeText(getContext(), "getLocation result: " + result + " message: "+ message, Toast.LENGTH_LONG).show();
                 try {
                     JSONObject json = new JSONObject(message);
                     mCurrentX = json.getDouble(Definition.JSON_NAVI_POSITION_X);
@@ -274,6 +299,65 @@ public class LocationFragment extends BaseFragment {
             public void onResult(int result, String message) {
                 LogTools.info("getAllMaps result: " + result + " message: " + message);
                 // 这里可以根据需要进一步处理 message，比如解析 JSON 或显示到界面
+            }
+        });
+    }
+
+    /**
+     * 查找当前点是否在地图节点上，返回节点名或空字符串
+     */
+    private void findCurrentPointNodeName() {
+        // 先获取当前点
+        RobotApi.getInstance().getPosition(0, new CommandListener() {
+            @Override
+            public void onResult(int result, String message) {
+                if (result == 0 || TextUtils.isEmpty(message)) {
+                    LogTools.info("获取当前点失败");
+                    Toast.makeText(getContext(), "获取当前点失败", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                try {
+                    JSONObject json = new JSONObject(message);
+                    final double x = json.getDouble(Definition.JSON_NAVI_POSITION_X);
+                    final double y = json.getDouble(Definition.JSON_NAVI_POSITION_Y);
+                    // 再获取所有点位
+                    RobotApi.getInstance().getPlaceList(0, new CommandListener() {
+                        @Override
+                        public void onResult(int result, String message) {
+                            if (result == 0 || TextUtils.isEmpty(message)) {
+                                LogTools.info("获取地图点位失败");
+                                Toast.makeText(getContext(), "获取地图点位失败", Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            try {
+                                org.json.JSONArray arr = new org.json.JSONArray(message);
+                                String foundName = "";
+                                for (int i = 0; i < arr.length(); i++) {
+                                    JSONObject obj = arr.getJSONObject(i);
+                                    double px = obj.optDouble("x", Double.NaN);
+                                    double py = obj.optDouble("y", Double.NaN);
+                                    String name = obj.optString("name", "");
+                                    LogTools.info("检查节点: " + name + " 坐标: (" + px + ", " + py + ")");
+                                    if (Math.abs(px - x) < 0.05 && Math.abs(py - y) < 0.05) {
+                                        foundName = name;
+                                        break;
+                                    }
+                                }
+                                LogTools.info("当前点节点名: " + foundName);
+                                if (foundName.isEmpty()) {
+                                    Toast.makeText(getContext(), "当前点不在任何节点上", Toast.LENGTH_LONG).show();
+                                } else {
+                                    Toast.makeText(getContext(), foundName, Toast.LENGTH_LONG).show();
+                                }
+                            } catch (Exception e) {
+                                LogTools.info("解析点位失败: " + e.getMessage());
+                                Toast.makeText(getContext(), "解析点位失败", Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    });
+                } catch (JSONException e) {
+                    LogTools.info("解析当前点失败: " + e.getMessage());
+                }
             }
         });
     }
