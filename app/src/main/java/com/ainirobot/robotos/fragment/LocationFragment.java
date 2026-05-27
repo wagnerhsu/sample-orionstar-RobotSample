@@ -304,10 +304,9 @@ public class LocationFragment extends BaseFragment {
     }
 
     /**
-     * 查找当前点是否在地图节点上，返回节点名或空字符串
+     * 查找当前点是否在地图节点上，返回节点名或空字符串（用API判断，异步串行，Deviation=2.0）
      */
     private void findCurrentPointNodeName() {
-        // 先获取当前点
         RobotApi.getInstance().getPosition(0, new CommandListener() {
             @Override
             public void onResult(int result, String message) {
@@ -318,9 +317,7 @@ public class LocationFragment extends BaseFragment {
                 }
                 try {
                     JSONObject json = new JSONObject(message);
-                    final double x = json.getDouble(Definition.JSON_NAVI_POSITION_X);
-                    final double y = json.getDouble(Definition.JSON_NAVI_POSITION_Y);
-                    // 再获取所有点位
+                    // 获取所有点位
                     RobotApi.getInstance().getPlaceList(0, new CommandListener() {
                         @Override
                         public void onResult(int result, String message) {
@@ -331,27 +328,44 @@ public class LocationFragment extends BaseFragment {
                             }
                             try {
                                 org.json.JSONArray arr = new org.json.JSONArray(message);
-                                String foundName = "";
-                                for (int i = 0; i < arr.length(); i++) {
-                                    JSONObject obj = arr.getJSONObject(i);
-                                    double px = obj.optDouble("x", Double.NaN);
-                                    double py = obj.optDouble("y", Double.NaN);
-                                    String name = obj.optString("name", "");
-                                    LogTools.info("检查节点: " + name + " 坐标: (" + px + ", " + py + ")");
-                                    if (Math.abs(px - x) < 0.05 && Math.abs(py - y) < 0.05) {
-                                        foundName = name;
-                                        break;
-                                    }
-                                }
-                                LogTools.info("当前点节点名: " + foundName);
-                                if (foundName.isEmpty()) {
-                                    Toast.makeText(getContext(), "当前点不在任何节点上", Toast.LENGTH_LONG).show();
-                                } else {
-                                    Toast.makeText(getContext(), foundName, Toast.LENGTH_LONG).show();
-                                }
+                                checkNodeAtIndex(arr, 0);
                             } catch (Exception e) {
                                 LogTools.info("解析点位失败: " + e.getMessage());
                                 Toast.makeText(getContext(), "解析点位失败", Toast.LENGTH_LONG).show();
+                            }
+                        }
+                        // 串行异步检查每个节点
+                        private void checkNodeAtIndex(final org.json.JSONArray arr, final int idx) {
+                            if (idx >= arr.length()) {
+                                Toast.makeText(getContext(), "当前点不在任何节点上", Toast.LENGTH_LONG).show();
+                                LogTools.info("当前点节点名: ");
+                                return;
+                            }
+                            try {
+                                JSONObject obj = arr.getJSONObject(idx);
+                                final String name = obj.optString("name", "");
+                                JSONObject params = new JSONObject();
+                                params.put(Definition.JSON_NAVI_TARGET_PLACE_NAME, name);
+                                params.put(Definition.JSON_NAVI_COORDINATE_DEVIATION, 2.0); // 与isRobotInlocation一致
+                                RobotApi.getInstance().isRobotInlocations(0, params.toString(), new CommandListener() {
+                                    @Override
+                                    public void onResult(int result, String message) {
+                                        try {
+                                            JSONObject json = new JSONObject(message);
+                                            boolean inLoc = json.optBoolean(Definition.JSON_NAVI_IS_IN_LOCATION, false);
+                                            if (inLoc) {
+                                                Toast.makeText(getContext(), name, Toast.LENGTH_LONG).show();
+                                                LogTools.info("当前点节点名: " + name);
+                                            } else {
+                                                checkNodeAtIndex(arr, idx + 1);
+                                            }
+                                        } catch (JSONException e) {
+                                            checkNodeAtIndex(arr, idx + 1);
+                                        }
+                                    }
+                                });
+                            } catch (Exception e) {
+                                checkNodeAtIndex(arr, idx + 1);
                             }
                         }
                     });
